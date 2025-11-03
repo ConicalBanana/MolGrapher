@@ -14,6 +14,7 @@ import torch
 from huggingface_hub import snapshot_download
 from torch_geometric.data import Batch
 
+from .._const import DATA_PATH
 from molgrapher.models.graph_classifier import GraphClassifier
 from molgrapher.models.graph_constructor import GraphConstructor
 from molgrapher.models.keypoint_detector import KeypointDetector
@@ -35,34 +36,33 @@ class GraphRecognizer(pl.LightningModule):
         self.config_dataset_keypoint = config_dataset_keypoint
 
         if keypoint_detector_model_path == "":
-            keypoint_detector_model_path = (
-                os.path.dirname(__file__)
-                + f"/../../data/models/keypoint_detector/kd_model.ckpt"
-            )
-            if not (os.path.exists(keypoint_detector_model_path)):
+            keypoint_detector_model_path = \
+                DATA_PATH / "models/keypoint_detector/kd_model.ckpt"
+            if not keypoint_detector_model_path.exists():
                 print("Downloading keypoint detector model...")
                 subprocess.run(
                     [
                         "wget",
                         "https://huggingface.co/ds4sd/MolGrapher/resolve/main/models/keypoint_detector/kd_model.ckpt",
                         "-P",
-                        "./data/models/keypoint_detector/",
+                        str(DATA_PATH / "models/keypoint_detector/"),
                     ],
                     check=True,
                 )
         if graph_classifier_model_path == "":
+            print(config_model_graph['node_classifier_variant'])
             graph_classifier_model_path = (
-                os.path.dirname(__file__)
-                + f"/../../data/models/graph_classifier/{config_model_graph['node_classifier_variant']}.ckpt"
+                DATA_PATH /
+                f"models/graph_classifier/{config_model_graph['node_classifier_variant']}.ckpt"
             )
-            if not (os.path.exists(graph_classifier_model_path)):
+            if not graph_classifier_model_path.exists():
                 print("Downloading node classifier model...")
                 subprocess.run(
                     [
                         "wget",
                         f"https://huggingface.co/ds4sd/MolGrapher/resolve/main/models/graph_classifier/{config_model_graph['node_classifier_variant']}.ckpt",
                         "-P",
-                        "./data/models/graph_classifier/",
+                        str(DATA_PATH / "models/graph_classifier/"),
                     ],
                     check=True,
                 )

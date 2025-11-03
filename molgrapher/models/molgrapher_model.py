@@ -6,8 +6,10 @@ import json
 import os
 import shutil
 import tempfile
-from pprint import pprint
 from time import time
+import typing as t
+from pathlib import Path
+from dataclasses import dataclass, field
 
 import cv2
 import matplotlib.pyplot as plt
@@ -22,120 +24,146 @@ from rdkit import Chem
 from rdkit.Chem import rdmolfiles
 from tqdm import tqdm
 
-from molgrapher.data_modules.data_module import DataModule
-from molgrapher.datasets.dataset_image import ImageDataset
-from molgrapher.models.abbreviation_detector import (AbbreviationDetectorCPU,
-                                                     AbbreviationDetectorGPU,
-                                                     SpellingCorrector)
-from molgrapher.models.graph_recognizer import (GraphRecognizer,
-                                                StereochemistryRecognizer)
-from molgrapher.utils.utils_dataset import get_bonds_sizes
-from molgrapher.utils.utils_logging import count_model_parameters
+from .._const import DATA_PATH
+from ..data_modules.data_module import DataModule
+from ..datasets.dataset_image import ImageDataset
+from .abbreviation_detector import \
+    AbbreviationDetectorCPU, AbbreviationDetectorGPU, SpellingCorrector
+from .graph_recognizer import \
+    GraphRecognizer, StereochemistryRecognizer
+from ..utils.utils_dataset import get_bonds_sizes
+from ..utils.utils_logging import count_model_parameters
 
 os.environ["OMP_NUM_THREADS"] = "1"
 cv2.setNumThreads(0)
 torch.set_float32_matmul_precision("medium")
 
 
+@dataclass()
 class MolgrapherModel:
-    def set_default_args(self):
-        self.args = {
-            "force_cpu": False,  # Force all processing to run on CPU.
-            "force_no_multiprocessing": True,  # Disable multiprocessing for PaddleOCR.
-            "num_threads_pytorch": 10,  # Number of threads used by PyTorch.
-            "num_processes_mp": 10,  # Number of processes for multiprocessing.
-            "chunk_size": 200,  # Number of images processed per batch.
-            "assign_stereo": True,  # Embed stereochemistry in MOL file output (only valid if a stereo model is used).
-            "align_rdkit_output": False,  # Embed 2D atom coordinates in output MOL files.
-            "remove_captions": True,  # Apply caption removal preprocessing using PaddleOCR.
-            "save_mol_folder": "",  # Output folder for saving MOL files.
-            "predict": True,  # Run prediction.
-            "preprocess": True,  # Apply preprocessing to input images.
-            "clean": True,  # Clean specified output folders before running.
-            "visualize": True,  # Visualize predicted graphs and MOL prediction.
-            "visualize_rdkit": False,  # Visualize MOL prediction alone.
-            "node_classifier_variant": "gc_no_stereo_model",  # Select between "gc_no_stereo_model", "gc_gcn_model" and "gc_stereo_model". 
-                                                              # "gc_no_stereo_model" has the best accuracy in most cases. 
-                                                              # "gc_gcn_model" has better accuracy in some cases but do not recognizes abbreviations.
-                                                              # "gc_stereo_model" can recognize stereo-chemistry.                                                               
-            "visualize_output_folder_path": os.path.dirname(__file__)
-            + "/../../data/visualization/predictions/default/",
-            "visualize_rdkit_output_folder_path": os.path.dirname(__file__)
-            + "/../../data/visualization/predictions/default_rdkit/",
-            "config_dataset_graph_path": os.path.dirname(__file__)
-            + "/../../data/config_dataset_graph_2.json",
-            "config_training_graph_path": os.path.dirname(__file__)
-            + "/../../data/config_training_graph.json",
-            "config_dataset_keypoint_path": os.path.dirname(__file__)
-            + "/../../data/config_dataset_keypoint.json",
-            "config_training_keypoint_path": os.path.dirname(__file__)
-            + "/../../data/config_training_keypoint.json",
-        }
+    # Force all processing to run on CPU.
+    force_cpu: bool = field(default=False)
+    # Disable multiprocessing for PaddleOCR.
+    force_no_multiprocessing: bool = field(default=True)
+    # Number of threads used by PyTorch.
+    num_threads_pytorch: int = field(default=10)
+    # Number of processes for multiprocessing.
+    num_processes_mp: int = field(default=10)
+    # Number of images processed per batch.
+    chunk_size: int = field(default=200)
+    # Embed stereochemistry in MOL file output
+    # (only valid if a stereo model is used).
+    assign_stereo: bool = field(default=True)
+    # Embed 2D atom coordinates in output MOL files.
+    align_rdkit_output: bool = field(default=False)
+    # Apply caption removal preprocessing using PaddleOCR.
+    remove_captions: bool = field(default=True)
+    # Output folder for saving MOL files.
+    save_mol_folder: t.Optional[Path] = field(default=None)
+    # Run prediction.
+    predict: bool = field(default=True)
+    # Apply preprocessing to input images.
+    preprocess: bool = field(default=True)
+    # Clean specified output folders before running.
+    clean: bool = field(default=True)
+    # Visualize predicted graphs and MOL prediction.
+    visualize: bool = field(default=True)
+    # Visualize MOL prediction alone.
+    visualize_rdkit: bool = field(default=False)
+    # Select between
+    # "gc_no_stereo_model", "gc_gcn_model" and "gc_stereo_model".
+    # ---
+    # "gc_no_stereo_model" has the best accuracy in most cases.
+    # "gc_gcn_model" has better accuracy in some cases
+    #       but do not recognizes abbreviations.
+    # "gc_stereo_model" can recognize stereo-chemistry.
+    node_classifier_variant: str = field(default="gc_no_stereo_model")
+    visualize_output_folder_path: Path = field(
+        # default=DATA_PATH / "visualization/predictions/default/"
+        default=Path("./visualizaiton/predictions/default/")
+    )
+    visualize_rdkit_output_folder_path: Path = field(
+        default=DATA_PATH / "visualization/predictions/default_rdkit/"
+    )
+    config_dataset_graph_path: Path = field(
+        default=DATA_PATH / "config_dataset_graph_2.json"
+    )
+    config_training_graph_path: Path = field(
+        default=DATA_PATH / "config_training_graph.json"
+    )
+    config_dataset_keypoint_path: Path = field(
+        default=DATA_PATH / "config_dataset_keypoint.json"
+    )
+    config_training_keypoint_path: Path = field(
+        default=DATA_PATH / "config_training_keypoint.json"
+    )
 
-    def __init__(self, args={}):
-        self.set_default_args()
-        self.args.update(args)
+    def __post_init__(self):
+        # self.set_default_args()
+        # self.args.update(args)
 
-        print("Arguments:")
-        pprint(self.args)
+        # print("Arguments:")
+        # pprint(self.args)
 
         # Create save folders
-        if self.args["visualize"]:
-            if self.args["clean"] and (
-                os.path.exists(self.args["visualize_output_folder_path"])
+        if self.visualize:
+            if self.clean and (
+                self.visualize_output_folder_path.exists()
             ):
-                shutil.rmtree(self.args["visualize_output_folder_path"])
-            if not os.path.exists(self.args["visualize_output_folder_path"]):
-                os.makedirs(self.args["visualize_output_folder_path"])
-        if self.args["predict"] and (self.args["save_mol_folder"] != ""):
-            if self.args["clean"] and (os.path.exists(self.args["save_mol_folder"])):
-                shutil.rmtree(self.args["save_mol_folder"])
-            if not os.path.exists(self.args["save_mol_folder"]):
-                os.makedirs(self.args["save_mol_folder"])
+                shutil.rmtree(self.visualize_output_folder_path)
+            self.visualize_output_folder_path\
+                .mkdir(parents=True, exist_ok=True)
+        if self.predict and (self.save_mol_folder is not None):
+            if self.clean and self.save_mol_folder.exists():
+                shutil.rmtree(self.save_mol_folder)
+            self.save_mol_folder.mkdir(parents=True, exist_ok=True)
 
         # Automatically set CPU/GPU device
-        if not (self.args["force_cpu"]):
-            self.args["force_cpu"] = not (torch.cuda.is_available())
-        print(f"PyTorch device: {'gpu' if not(self.args['force_cpu']) else 'cpu'}")
+        if not self.force_cpu:
+            self.force_cpu = not torch.cuda.is_available()
+        device = ('gpu' if not self.force_cpu else 'cpu')
+        print(f"PyTorch device: {device}")
 
         # Read config file
-        with open(self.args["config_dataset_graph_path"]) as file:
+        with open(self.config_dataset_graph_path) as file:
             self.config_dataset_graph = json.load(file)
-        with open(self.args["config_training_graph_path"]) as file:
+        with open(self.config_training_graph_path) as file:
             self.config_training_graph = json.load(file)
-        with open(self.args["config_dataset_keypoint_path"]) as file:
+        with open(self.config_dataset_keypoint_path) as file:
             self.config_dataset_keypoint = json.load(file)
-        with open(self.args["config_training_keypoint_path"]) as file:
+        with open(self.config_training_keypoint_path) as file:
             self.config_training_keypoint = json.load(file)
 
         # Update config
-        self.config_dataset_graph["num_processes_mp"] = self.args["num_processes_mp"]
-        self.config_dataset_graph["num_threads_pytorch"] = self.args[
-            "num_threads_pytorch"
-        ]
-        self.config_dataset_keypoint["num_processes_mp"] = self.args["num_processes_mp"]
-        self.config_dataset_keypoint["num_threads_pytorch"] = self.args[
-            "num_threads_pytorch"
-        ]
+        self.config_dataset_graph["num_processes_mp"] = \
+            self.num_processes_mp
+        self.config_dataset_graph["num_threads_pytorch"] = \
+            self.num_threads_pytorch
+        self.config_dataset_keypoint["num_processes_mp"] = \
+            self.num_processes_mp
+        self.config_dataset_keypoint["num_threads_pytorch"] = \
+            self.num_threads_pytorch
 
-        # Update number of atoms/bonds classes if a node classifier variant is selected.
-        if self.args["node_classifier_variant"] != "":
+        # Update number of atoms/bonds classes
+        # if a node classifier variant is selected.
+        if self.node_classifier_variant != "":
+            # print("node_classifier_variant", self.node_classifier_variant)
             self.config_model_graph = {}
-            self.config_model_graph["node_classifier_variant"] = self.args[
-                "node_classifier_variant"
-            ]
-            if self.args["node_classifier_variant"] == "gc_no_stereo_model":
-                self.config_dataset_graph["nb_atoms_classes"] = 182
-                self.config_dataset_graph["nb_bonds_classes"] = 6
-                self.config_model_graph["gcn_on"] = False
-            if self.args["node_classifier_variant"] == "gc_stereo_model":
-                self.config_dataset_graph["nb_atoms_classes"] = 182
-                self.config_dataset_graph["nb_bonds_classes"] = 8
-                self.config_model_graph["gcn_on"] = False
-            if self.args["node_classifier_variant"] == "gc_gcn_model":
-                self.config_dataset_graph["nb_atoms_classes"] = 141
-                self.config_dataset_graph["nb_bonds_classes"] = 5
-                self.config_model_graph["gcn_on"] = True
+            self.config_model_graph["node_classifier_variant"] = \
+                self.node_classifier_variant
+            match self.node_classifier_variant:
+                case "gc_no_stereo_model":
+                    self.config_dataset_graph["nb_atoms_classes"] = 182
+                    self.config_dataset_graph["nb_bonds_classes"] = 6
+                    self.config_model_graph["gcn_on"] = False
+                case "gc_stereo_model":
+                    self.config_dataset_graph["nb_atoms_classes"] = 182
+                    self.config_dataset_graph["nb_bonds_classes"] = 8
+                    self.config_model_graph["gcn_on"] = False
+                case "gc_gcn_model":
+                    self.config_dataset_graph["nb_atoms_classes"] = 141
+                    self.config_dataset_graph["nb_bonds_classes"] = 5
+                    self.config_model_graph["gcn_on"] = True
 
         # Set # threads
         torch.set_num_threads(self.config_dataset_graph["num_threads_pytorch"])
@@ -148,15 +176,22 @@ class MolgrapherModel:
             self.config_training_graph,
             self.config_model_graph,
         )
+        kp_det_nparam = \
+            round(
+                count_model_parameters(self.model.keypoint_detector)/10**6,
+                4
+            )
         print(
-            f"Keypoint detector number parameters: {round(count_model_parameters(self.model.keypoint_detector)/10**6, 4)} M"
+            f"Keypoint detector number parameters: {kp_det_nparam} M"
         )
+        node_cla_nparam = \
+            round(count_model_parameters(self.model.graph_classifier)/10**6, 4)
         print(
-            f"Node classifier number parameters: {round(count_model_parameters(self.model.graph_classifier)/10**6, 4)} M"
+            f"Node classifier number parameters: {node_cla_nparam} M"
         )
 
         # Set up trainer
-        if self.args["force_cpu"]:
+        if self.force_cpu:
             self.trainer = pl.Trainer(
                 accelerator="cpu",
                 precision=self.config_training_graph["precision"],
@@ -171,19 +206,19 @@ class MolgrapherModel:
             )
 
         # Setup abbreviation detector
-        if self.args["force_cpu"] or (
+        if self.force_cpu or (
             self.config_training_graph["accelerator"] == "cpu"
         ):
             self.abbreviation_detector = AbbreviationDetectorCPU(
                 self.config_dataset_graph,
-                force_cpu=self.args["force_cpu"],
-                force_no_multiprocessing=self.args["force_no_multiprocessing"],
+                force_cpu=self.force_cpu,
+                force_no_multiprocessing=self.force_no_multiprocessing,
             )
         else:
             self.abbreviation_detector = AbbreviationDetectorGPU(
                 self.config_dataset_graph,
-                force_cpu=self.args["force_cpu"],
-                force_no_multiprocessing=self.args["force_no_multiprocessing"],
+                force_cpu=self.force_cpu,
+                force_no_multiprocessing=self.force_no_multiprocessing,
             )
 
         # Setup stereochemistry recognizer
@@ -193,21 +228,22 @@ class MolgrapherModel:
 
         # Set abbreviations list
         with open(
-            os.path.dirname(__file__)
-            + "/../../data/ocr_mapping/ocr_atoms_classes_mapping.json"
+            DATA_PATH / "ocr_mapping/ocr_atoms_classes_mapping.json"
         ) as file:
             self.ocr_atoms_classes_mapping = json.load(file)
 
         self.abbreviations_smiles_mapping = get_abbreviations_smiles_mapping()
-        self.spelling_corrector = SpellingCorrector(self.abbreviations_smiles_mapping)
+        self.spelling_corrector = \
+            SpellingCorrector(self.abbreviations_smiles_mapping)
 
     def predict_batch(self, _images_paths):
         annotations_batch = []
-        for _batch_images_paths in chunked(_images_paths, self.args["chunk_size"]):
-            annotations_batch.extend(self.predict(_batch_images_paths))
+        for _batch_images_paths in \
+                chunked(_images_paths, self.chunk_size):
+            annotations_batch.extend(self.predict_single(_batch_images_paths))
         return annotations_batch
 
-    def predict(self, images_or_paths):
+    def predict_single(self, images_or_paths: list[str]):
         if not isinstance(images_or_paths, list):
             images_or_paths = [images_or_paths]
 
@@ -216,31 +252,33 @@ class MolgrapherModel:
             self.config_dataset_graph,
             dataset_class=ImageDataset,
             images_or_paths=images_or_paths,
-            force_cpu=self.args["force_cpu"],
-            remove_captions=self.args["remove_captions"],
+            force_cpu=self.force_cpu,
+            remove_captions=self.remove_captions,
         )
         data_module.setup_images_benchmarks()
-        if self.args["preprocess"]:
-            print(f"Starting Caption Removal Preprocessing")
+        if self.preprocess:
+            print("Starting Caption Removal Preprocessing")
             ref_t = time()
             data_module.preprocess()
             print(
-                f"Caption Removal Preprocessing completed in {round(time() - ref_t, 2)}"
+                "Caption Removal Preprocessing completed in ",
+                round(time() - ref_t, 2)
             )
 
         # Get predictions
-        print(f"Starting Keypoint Detection + Node Classification")
+        print("Starting Keypoint Detection + Node Classification")
         ref_t = time()
         predictions_out = self.trainer.predict(
             self.model, dataloaders=data_module.predict_dataloader()
         )
-        if predictions_out == None:
+        if predictions_out is None:
             predictions_out = []
         print(
-            f"Keypoint Detection + Node Classification completed in {round(time() - ref_t, 2)}"
+            "Keypoint Detection + Node Classification completed in ",
+            round(time() - ref_t, 2)
         )
 
-        images_filenames = []
+        images_filenames: list[str] = []
         images_ = []
         predictions = {"graphs": [], "keypoints": [], "confidences": []}
         for _ in range(len(predictions_out)):
@@ -267,25 +305,28 @@ class MolgrapherModel:
         bonds_sizes = get_bonds_sizes(predictions["keypoints"], scaling_factor)
 
         # Recognize abbreviations
-        print(f"Starting Abbreviation Recognition")
+        print("Starting Abbreviation Recognition")
         ref_t = time()
         abbreviations_list = self.abbreviation_detector.mp_run(
             images_filenames, predictions["graphs"], bonds_sizes, filter=False
         )
         abbreviations_list_ocr = copy.deepcopy(abbreviations_list)
-        print(f"Abbreviation Recognition completed in {round(time() - ref_t, 2)}")
+        print(
+            "Abbreviation Recognition completed in ",
+            round(time() - ref_t, 2)
+        )
 
         # Recognize stereochemistry
-        if self.args["assign_stereo"] and (
-            self.args["node_classifier_variant"] == "gc_stereo_model"
-        ):
-            print(f"Starting Stereochemistry Recognition")
+        if self.assign_stereo \
+                and self.node_classifier_variant == "gc_stereo_model":
+            print("Starting Stereochemistry Recognition")
             ref_t = time()
             predictions["graphs"] = self.stereochemistry_recognizer(
                 images_, predictions["graphs"], bonds_sizes
             )
             print(
-                f"Stereochemistry Recognition completed in {round(time() - ref_t, 2)}"
+                "Stereochemistry Recognition completed in ",
+                round(time() - ref_t, 2)
             )
 
         # Create RDKit graph
@@ -301,10 +342,10 @@ class MolgrapherModel:
                 self.ocr_atoms_classes_mapping,
                 self.spelling_corrector,
                 assign_stereo=(
-                    self.args["assign_stereo"]
-                    and (self.args["node_classifier_variant"] == "gc_stereo_model")
+                    self.assign_stereo
+                    and self.node_classifier_variant == "gc_stereo_model"
                 ),
-                align_rdkit_output=self.args["align_rdkit_output"],
+                align_rdkit_output=self.align_rdkit_output,
                 postprocessing_flags={},
             )
             predicted_molecules.append(predicted_molecule)
@@ -317,12 +358,13 @@ class MolgrapherModel:
         for i, (predicted_molecule, image_filename) in enumerate(
             zip(predictions["molecules"], images_filenames)
         ):
-            if self.args["save_mol_folder"] != "":
-                molecule_path = (
-                    self.args["save_mol_folder"]
-                    + image_filename.split("/")[-1][:-4].replace("_preprocessed", "")
-                    + ".mol"
-                )
+            if self.save_mol_folder is not None:
+                molecule_path = self.save_mol_folder / (
+                        image_filename
+                        .split("/")[-1][:-4]
+                        .replace("_preprocessed", "")
+                        + ".mol"
+                    )
                 rdmolfiles.MolToMolFile(
                     predicted_molecule, molecule_path, kekulize=False
                 )
@@ -354,13 +396,15 @@ class MolgrapherModel:
             if predicted_smiles is not None:
                 if abbreviations != []:
                     abbreviations_texts = [
-                        abbreviation["text"] for abbreviation in abbreviations
+                        abbreviation["text"]
+                        for abbreviation in abbreviations
                     ]
                 else:
                     abbreviations_texts = []
                 if abbreviations_ocr != []:
                     abbreviations_ocr_texts = [
-                        abbreviation["text"] for abbreviation in abbreviations_ocr
+                        abbreviation["text"]
+                        for abbreviation in abbreviations_ocr
                     ]
                 else:
                     abbreviations_ocr_texts = []
@@ -375,18 +419,18 @@ class MolgrapherModel:
                 }
                 annotations.append(annotation)
 
-            if self.args["save_mol_folder"] != "":
-                annotation_filename = self.args["save_mol_folder"] + "smiles.jsonl"
+            if self.save_mol_folder is not None:
+                annotation_filename = self.save_mol_folder / "smiles.jsonl"
                 with open(annotation_filename, "a") as f:
                     json.dump(annotation, f)
                     f.write("\n")
 
-        if self.args["save_mol_folder"] != "":
+        if self.save_mol_folder is not None:
             print("Annotation:")
             print(pd.read_json(path_or_buf=annotation_filename, lines=True))
 
         # Visualize predictions
-        if self.args["visualize"]:
+        if self.visualize:
             for image_filename, image, graph, keypoints, molecule in tqdm(
                 zip(
                     images_filenames,
@@ -430,27 +474,37 @@ class MolgrapherModel:
                     )
                     if image is not None:
                         axis[2].imshow(image.permute(1, 2, 0))
-                print(
-                    f"{self.args['visualize_output_folder_path']}/{image_filename.split('/')[-1]}"
-                )
-                plt.savefig(
-                    f"{self.args['visualize_output_folder_path']}/{image_filename.split('/')[-1]}"
-                )
+                fig_path = \
+                    self.visualize_output_folder_path / \
+                    image_filename.split('/')[-1]
+                print(fig_path)
+                plt.savefig(fig_path)
                 plt.close()
 
-        if self.args["visualize_rdkit"]:
-            for image_filename in self.args["input_images_paths"]:
+        if self.visualize_rdkit:
+            # for image_filename in self.input_images_paths:
+            for image_filename in images_or_paths:
+                if self.save_mol_folder is None:
+                    raise AttributeError
+
                 molecule_path = (
-                    self.args["save_mol_folder"]
-                    + image_filename.split("/")[-1][:-4].replace("_preprocessed", "")
-                    + ".mol"
+                    self.save_mol_folder
+                    / (
+                        image_filename.split("/")[-1][:-4]
+                        .replace("_preprocessed", "")
+                        + ".mol"
+                    )
                 )
-                if os.path.exists(molecule_path):
+                if molecule_path.exists():
                     print(molecule_path)
                     image = Image.open(image_filename).convert("RGB")
                     figure, axis = plt.subplots(1, 2, figsize=(20, 10))
                     axis[0].imshow(image)
-                    molecule = rdmolfiles.MolFromMolFile(molecule_path, sanitize=False)
+                    molecule = \
+                        rdmolfiles.MolFromMolFile(
+                            molecule_path,
+                            sanitize=False
+                        )
                     image = draw_molecule_rdkit(
                         smiles=Chem.MolToSmiles(molecule),
                         molecule=molecule,
@@ -461,9 +515,10 @@ class MolgrapherModel:
                     )
                     if image is not None:
                         axis[1].imshow(image.permute(1, 2, 0))
-                    plt.savefig(
-                        f"{self.args['visualize_rdkit_output_folder_path']}/{image_filename.split('/')[-1]}"
-                    )
+                    output_path = \
+                        self.visualize_rdkit_output_folder_path / \
+                        image_filename.split('/')[-1]
+                    plt.savefig(output_path)
                 plt.close()
 
         return annotations
