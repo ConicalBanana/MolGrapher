@@ -1,3 +1,6 @@
+#Model files
+data/models/**/*ckpt
+
 .generated/
 
 cps-auth.json
