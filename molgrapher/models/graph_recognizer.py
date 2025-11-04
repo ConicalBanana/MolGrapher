@@ -176,18 +176,16 @@ class GraphRecognizer(pl.LightningModule):
 
 class StereochemistryRecognizer:
     def __init__(self, config):
-        symbols_classes_atoms = json.load(
-            open(
-                os.path.dirname(__file__)
-                + f"/../../data/vocabularies/vocabulary_atoms_{config['nb_atoms_classes']}.json"
-            )
-        )
-        types_classes_bonds = json.load(
-            open(
-                os.path.dirname(__file__)
-                + f"/../../data/vocabularies/vocabulary_bonds_{config['nb_bonds_classes']}.json"
-            )
-        )
+        with open(
+            DATA_PATH /
+            f"vocabularies/vocabulary_atoms_{config['nb_atoms_classes']}.json"
+        ) as fo:
+            symbols_classes_atoms = json.load(fo)
+        with open(
+            DATA_PATH /
+            f"vocabularies/vocabulary_bonds_{config['nb_bonds_classes']}.json"
+        ) as fo:
+            types_classes_bonds = json.load(fo)
         self.atoms_classes_symbols = {v: k for k, v in symbols_classes_atoms.items()}
         self.bonds_classes_types = {v: k for k, v in types_classes_bonds.items()}
 

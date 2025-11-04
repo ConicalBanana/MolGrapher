@@ -3,7 +3,7 @@
 
 import math
 import multiprocessing
-# Python
+import typing as t
 import os
 
 # Images
@@ -54,13 +54,18 @@ class CaptionRemover:
         # Set the number of threads used in pytorch to 1 to avoid conflicts with MKL.
         torch.set_num_threads(1)
 
-    def _preprocess_images_process(self, images_or_paths):
+    def _preprocess_images_process(
+        self,
+        images_or_paths: t.Sequence[str | Image.ImageFile.ImageFile]
+    ):
         pil_images = []
         for image_or_path in tqdm(images_or_paths):
             if isinstance(image_or_path, str):
-                pil_image = Image.open(image_or_path)
+                pil_image: Image.ImageFile.ImageFile \
+                    = Image.open(image_or_path)
             else:
-                pil_image = image_or_path
+                pil_image: Image.ImageFile.ImageFile \
+                    = image_or_path
 
             pil_image = resize_image(
                 pil_image,

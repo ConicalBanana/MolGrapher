@@ -13,6 +13,8 @@ from torchvision.transforms import functional
 
 from molgrapher.utils.utils_graph import MolecularGraph
 
+from .._const import DATA_PATH
+
 
 class GraphConstructor:
     def __init__(
@@ -32,18 +34,16 @@ class GraphConstructor:
         self.discarded_bond_length_factor = discarded_bond_length_factor
         self.restricted_proposals = restricted_proposals
 
-        self.symbols_classes_atoms = json.load(
-            open(
-                os.path.dirname(__file__)
-                + f"/../../data/vocabularies/vocabulary_atoms_{self.config_dataset_graph['nb_atoms_classes']}.json"
-            )
-        )
-        self.types_classes_bonds = json.load(
-            open(
-                os.path.dirname(__file__)
-                + f"/../../data/vocabularies/vocabulary_bonds_{self.config_dataset_graph['nb_bonds_classes']}.json"
-            )
-        )
+        with open(
+            DATA_PATH /
+            f"vocabularies/vocabulary_atoms_{self.config_dataset_graph['nb_atoms_classes']}.json"
+        ) as fo:
+            self.symbols_classes_atoms = json.load(fo)
+        with open(
+            DATA_PATH /
+            f"vocabularies/vocabulary_bonds_{self.config_dataset_graph['nb_bonds_classes']}.json"
+        ) as fo:
+            self.types_classes_bonds = json.load(fo)
 
         self.image = image
         self.gt_molecular_graph = gt_molecular_graph

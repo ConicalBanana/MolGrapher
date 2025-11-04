@@ -34,6 +34,9 @@ from mol_depict.molfile_parser.label_molfile import LabelMolFile
 from mol_depict.utils.utils_drawing import draw_molecule_keypoints_rdkit
 from mol_depict.utils.utils_image import resize_image, transform_png_image
 
+from .._const import DATA_PATH
+
+
 try:
     from annotator.labeled_data_utils import LabeledData
 except Exception as e:
@@ -62,10 +65,12 @@ class DataModule(pl.LightningDataModule):
         self.val_dataset = None
         self.benchmarks_datasets = None
         self.synthetic_save_path = (
-            os.path.dirname(__file__)
-            + "/../../data/synthetic_images_molecules_keypoints/keypoints_images_filenames_"
-            + self.config["experiment_name"]
-            + ".json"
+            DATA_PATH
+            / "synthetic_images_molecules_keypoints"
+            / (
+                f"keypoints_images_filenames_{self.config["experiment_name"]}"
+                ".json"
+            )
         )
         self.dataset_class = dataset_class
         self.mode = mode
@@ -146,25 +151,14 @@ class DataModule(pl.LightningDataModule):
             )
         else:
             nb_sample = self.config["nb_sample"] - dataset_triple_bonds_len
-            dataset_len = (
-                sum(
-                    1
-                    for line in open(
-                        os.path.dirname(__file__)
-                        + "/../../data/smiles/experiment-002.csv"
-                    )
-                )
-                - 1
-            )
+            with open(DATA_PATH / "smiles/experiment-002.csv") as fo:
+                dataset_len = sum(1 for line in fo) - 1
             smiles_list_triple_bonds = list(
-                pd.read_csv(
-                    os.path.dirname(__file__)
-                    + "/../../data/smiles/experiment-001_triple_bonds.csv"
-                )["isosmiles"]
+                pd.read_csv(DATA_PATH / "smiles/experiment-001_triple_bonds.csv")["isosmiles"]
             )
             smiles_list = list(
                 pd.read_csv(
-                    os.path.dirname(__file__) + "/../../data/smiles/experiment-002.csv",
+                    DATA_PATH / "smiles/experiment-002.csv",
                     skiprows=sorted(
                         random.sample(
                             range(1, dataset_len + 1), dataset_len - nb_sample
@@ -1042,18 +1036,17 @@ class DataModule(pl.LightningDataModule):
         ]
         print("Dataset: ", self.benchmarks_datasets[0].dataset)
 
-    def setup_images_benchmarks(self, max_index=None):
+    def setup_images_benchmarks(self):
         images_filenames = []
-        if isinstance(self.images_or_paths, str) or isinstance(
-            self.images_or_paths, Path
-        ):
-            if path.isdir(self.images_or_paths):
+        if isinstance(self.images_or_paths, str) \
+                or isinstance(self.images_or_paths, Path):
+            if Path(self.images_or_paths).is_dir():
                 images_filenames = [
                     image_filename
                     for image_filename in glob.glob(self.images_or_paths + "/*")
                     if ((".png" in image_filename) or (".TIF" in image_filename))
                 ]
-            elif path.isfile(self.images_or_paths):
+            elif Path(self.images_or_paths).is_file():
                 images_filenames = [self.images_or_paths]
         elif isinstance(self.images_or_paths, list):
             if all(
@@ -1092,7 +1085,11 @@ class DataModule(pl.LightningDataModule):
             }
         )
         self.benchmarks_datasets = [
-            self.dataset_class(dataset, config=self.config, force_cpu=self.force_cpu)
+            self.dataset_class(
+                dataset,
+                config=self.config,
+                force_cpu=self.force_cpu
+            )
         ]
 
     def preprocess(self):
@@ -1120,9 +1117,11 @@ class DataModule(pl.LightningDataModule):
             for preprocessed_image, image_filename in zip(
                 preprocessed_images, benchmark_dataset.dataset["image_filename"]
             ):
+                preprocessed_image: Image.ImageFile.ImageFile
                 preprocessed_image_filename = image_filename[:-4] + "_preprocessed.png"
                 preprocessed_image.save(preprocessed_image_filename)
                 preprocessed_images_filenames.append(preprocessed_image_filename)
+                preprocessed_image.close()
             benchmark_dataset.dataset["image_filename"] = preprocessed_images_filenames
 
     def transform_keypoints(self, keypoints, transformation, margin):
@@ -1189,7 +1188,11 @@ class DataModule(pl.LightningDataModule):
         dataloaders_list = []
         print("Setting up predict dataloader")
         print(
-            f"Real benchmarks sets lengths (on-the-fly validation): {[len(benchmark_dataset) for benchmark_dataset in self.benchmarks_datasets]}"
+            "Real benchmarks sets lengths (on-the-fly validation): ",
+            [
+                len(benchmark_dataset)
+                for benchmark_dataset in self.benchmarks_datasets
+            ]
         )
         for benchmark_dataset in self.benchmarks_datasets:
             dataloaders_list.append(self.get_dataloader(benchmark_dataset))

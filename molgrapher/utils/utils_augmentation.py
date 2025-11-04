@@ -20,6 +20,7 @@ from albumentations.augmentations.geometric.transforms import (Affine,
 # Modules
 from mol_depict.utils.image_transformation import (PepperPatches,
                                                    RandomCaption, RandomLines)
+from .._const import DATA_PATH
 
 
 def get_transforms_dict(config):
@@ -197,18 +198,10 @@ class GraphTransformer:
         self.decoy_atom_population_density = decoy_atom_population_density
 
         if not keypoints_only:
-            self.symbols_classes_atoms = json.load(
-                open(
-                    os.path.dirname(__file__)
-                    + f"/../../data/vocabularies/vocabulary_atoms_{config['nb_atoms_classes']}.json"
-                )
-            )
-            self.types_classes_bonds = json.load(
-                open(
-                    os.path.dirname(__file__)
-                    + f"/../../data/vocabularies/vocabulary_bonds_{config['nb_bonds_classes']}.json"
-                )
-            )
+            with open(DATA_PATH / f"vocabularies/vocabulary_atoms_{config['nb_atoms_classes']}.json", "r") as fo:
+                self.symbols_classes_atoms = json.load(fo)
+            with open(DATA_PATH / f"vocabularies/vocabulary_bonds_{config['nb_bonds_classes']}.json", "r") as fo:
+                self.types_classes_bonds = json.load(fo)
 
     def shift_keypoints_positions(self, keypoints, shift_window):
         shifted_keypoints = []

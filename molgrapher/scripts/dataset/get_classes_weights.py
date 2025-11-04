@@ -13,6 +13,9 @@ from tqdm import tqdm
 from molgrapher.data_modules.data_module import DataModule
 from molgrapher.datasets.dataset_graph import GraphDataset
 
+from .._const import DATA_PATH
+
+
 os.environ["OMP_NUM_THREADS"] = "4"
 cv2.setNumThreads(0)
 
@@ -37,18 +40,15 @@ def main():
 
     loader = data_module.train_dataloader()
 
-    symbols_classes_atoms = json.load(
-        open(
-            os.path.dirname(__file__)
-            + "/../../../data/vocabularies/vocabulary_atoms.json"
-        )
-    )
-    types_classes_bonds = json.load(
-        open(
-            os.path.dirname(__file__)
-            + "/../../../data/vocabularies/vocabulary_bonds.json"
-        )
-    )
+    with open(
+        DATA_PATH / "vocabularies/vocabulary_atoms.json"
+    ) as fo:
+        symbols_classes_atoms = json.load(fo)
+    with open(
+        DATA_PATH / "vocabularies/vocabulary_bonds.json"
+    ) as fo:
+        types_classes_bonds = json.load(fo)
+
     atoms_classes_symbols = {v: k for k, v in symbols_classes_atoms.items()}
     bonds_classes_types = {v: k for k, v in types_classes_bonds.items()}
 

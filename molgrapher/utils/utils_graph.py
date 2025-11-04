@@ -14,7 +14,8 @@ from mol_depict.utils.utils_drawing import draw_molecule_rdkit
 from rdkit import Chem
 from torch_geometric.data import Data
 
-from molgrapher.utils.utils_postprocessing import GraphPostprocessor
+from .utils_postprocessing import GraphPostprocessor
+from .._const import DATA_PATH
 
 
 class MolecularGraph:
@@ -35,18 +36,15 @@ class MolecularGraph:
         self.data = None
         self.bond_size = 0
         self.config_dataset_graph = config_dataset_graph
-        self.symbols_classes_atoms = json.load(
-            open(
-                os.path.dirname(__file__)
-                + f"/../../data/vocabularies/vocabulary_atoms_{config_dataset_graph['nb_atoms_classes']}.json"
-            )
-        )
-        self.types_classes_bonds = json.load(
-            open(
-                os.path.dirname(__file__)
-                + f"/../../data/vocabularies/vocabulary_bonds_{config_dataset_graph['nb_bonds_classes']}.json"
-            )
-        )
+        with open(
+            DATA_PATH / f"vocabularies/vocabulary_atoms_{config_dataset_graph['nb_atoms_classes']}.json"
+        ) as fo:
+            self.symbols_classes_atoms = json.load(fo)
+        with open(
+            DATA_PATH / f"vocabularies/vocabulary_bonds_{config_dataset_graph['nb_bonds_classes']}.json"
+        ) as fo:
+            self.types_classes_bonds = json.load(fo)
+
         self.atoms_classes_symbols = {
             v: k for k, v in self.symbols_classes_atoms.items()
         }

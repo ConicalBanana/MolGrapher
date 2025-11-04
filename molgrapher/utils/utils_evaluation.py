@@ -21,6 +21,8 @@ from sklearn.metrics import (accuracy_score, classification_report,
 from sklearn.preprocessing import MultiLabelBinarizer
 from SmilesPE.pretokenizer import atomwise_tokenizer
 
+from .._const import DATA_PATH
+
 
 def get_molecule_information(smiles=None, molfile_filename=None):
     """
@@ -436,18 +438,15 @@ def flatten_list(input_list):
 
 
 def get_metrics(predictions, selection):
-    vocabulary_atoms = json.load(
-        open(
-            os.getcwd()
-            + f"/../../data/vocabularies/vocabulary_atoms_{config['nb_atoms_classes']}.json"
-        )
-    )
-    vocabulary_bonds = json.load(
-        open(
-            os.getcwd()
-            + f"/../../data/vocabularies/vocabulary_atoms_{config['nb_bonds_classes']}.json"
-        )
-    )
+    atom_file_path = \
+        DATA_PATH / f"vocabularies/vocabulary_atoms_{config['nb_atoms_classes']}.json"
+    with open(atom_file_path) as fo:
+        vocabulary_atoms = json.load(fo)
+
+    bond_file_path = \
+        DATA_PATH / f"vocabularies/vocabulary_atoms_{config['nb_bonds_classes']}.json"
+    with open(bond_file_path) as fo:
+        vocabulary_bonds = json.load(fo)
 
     gt_atoms = [
         prediction

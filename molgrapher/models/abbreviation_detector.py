@@ -22,6 +22,8 @@ from weighted_levenshtein import lev
 # Modules
 from molgrapher.utils.utils_dataset import CaptionRemover, crop_tight
 
+from .._const import DATA_PATH
+
 
 def get_ocr_recognition_only(force_cpu=False):
     ocr_recognition_only = PaddleOCR(
@@ -110,6 +112,7 @@ class AbbreviationDetector:
 
             # Remove captions
             image = self.caption_remover(pil_image)
+            pil_image.close()
 
             # Remove borders
             pil_image = Image.fromarray(image).convert("RGB")
@@ -596,10 +599,9 @@ class SpellingCorrector:
     def __init__(self, abbreviations_smiles_mapping=None):
         self.abbreviations = abbreviations_smiles_mapping
         with open(
-            os.path.dirname(__file__)
-            + "/../../data/ocr_mapping/ocr_atoms_classes_mapping.json"
-        ) as file:
-            ocr_atoms_classes_mapping = json.load(file)
+            DATA_PATH / "ocr_mapping/ocr_atoms_classes_mapping.json"
+        ) as fo:
+            ocr_atoms_classes_mapping = json.load(fo)
         self.abbreviations = {**self.abbreviations, **ocr_atoms_classes_mapping}
         self.set_costs()
 

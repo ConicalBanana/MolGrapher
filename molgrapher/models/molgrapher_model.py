@@ -222,9 +222,8 @@ class MolgrapherModel:
             )
 
         # Setup stereochemistry recognizer
-        self.stereochemistry_recognizer = StereochemistryRecognizer(
-            self.config_dataset_graph
-        )
+        self.stereochemistry_recognizer = \
+            StereochemistryRecognizer(self.config_dataset_graph)
 
         # Set abbreviations list
         with open(
@@ -243,7 +242,7 @@ class MolgrapherModel:
             annotations_batch.extend(self.predict_single(_batch_images_paths))
         return annotations_batch
 
-    def predict_single(self, images_or_paths: list[str]):
+    def predict_single(self, images_or_paths: list[str] | str):
         if not isinstance(images_or_paths, list):
             images_or_paths = [images_or_paths]
 
@@ -269,8 +268,11 @@ class MolgrapherModel:
         print("Starting Keypoint Detection + Node Classification")
         ref_t = time()
         predictions_out = self.trainer.predict(
-            self.model, dataloaders=data_module.predict_dataloader()
+            self.model,
+            dataloaders=data_module.predict_dataloader()
         )
+        del data_module  # Release memory
+
         if predictions_out is None:
             predictions_out = []
         print(

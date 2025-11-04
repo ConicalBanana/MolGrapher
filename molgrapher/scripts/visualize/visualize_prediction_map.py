@@ -17,6 +17,8 @@ from molgrapher.datasets.dataset_benchmark import BenchmarkDataset
 from molgrapher.models.graph_classifier import GraphClassifier
 from molgrapher.utils.utils_graph import MolecularGraph
 
+from .._const import DATA_PATH
+
 
 def mscatter(x, y, ax=None, m=None, **kw):
     import matplotlib.markers as mmarkers
@@ -183,18 +185,15 @@ def main():
         ]
         colors = [color for color in colors if color not in white_colors] * 50
 
-        symbols_classes_atoms = json.load(
-            open(
-                os.path.dirname(__file__)
-                + "/../../../data/vocabularies/vocabulary_atoms.json"
-            )
-        )
-        types_classes_bonds = json.load(
-            open(
-                os.path.dirname(__file__)
-                + "/../../../data/vocabularies/vocabulary_bonds.json"
-            )
-        )
+        with open(
+            DATA_PATH / "vocabularies/vocabulary_atoms.json"
+        ) as fo:
+            symbols_classes_atoms = json.load(fo)
+        with open(
+            DATA_PATH / "vocabularies/vocabulary_bonds.json"
+        ) as fo:
+            types_classes_bonds = json.load(fo)
+
         atoms_classes_symbols = {v: k for k, v in symbols_classes_atoms.items()}
         bonds_classes_types = {v: k for k, v in types_classes_bonds.items()}
         atoms_colors = {k: colors[v] for k, v in symbols_classes_atoms.items()}

@@ -59,6 +59,7 @@ class MolfileDataset(torch.utils.data.Dataset):
 
                 # Remove captions (95% of the dataloading time)
                 image = self.caption_remover(pil_image)
+                pil_image.close()
 
                 # Remove borders
                 pil_image = Image.fromarray(image).convert("RGB")
