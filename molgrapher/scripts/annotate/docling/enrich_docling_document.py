@@ -2,16 +2,16 @@
 # -*- coding: utf-8 -*-
 
 import argparse
-import base64
-import glob
+# import base64
+# import glob
 import json
 import os
-import tempfile
+# import tempfile
 from io import BytesIO
 
 from docling_core.types.doc import DoclingDocument
 from docling_core.types.doc.document import PictureMoleculeData
-from PIL import Image
+# from PIL import Image
 
 from molgrapher.models.molgrapher_model import MolgrapherModel
 

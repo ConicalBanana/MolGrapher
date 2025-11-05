@@ -68,7 +68,7 @@ class DataModule(pl.LightningDataModule):
             DATA_PATH
             / "synthetic_images_molecules_keypoints"
             / (
-                f"keypoints_images_filenames_{self.config["experiment_name"]}"
+                f"keypoints_images_filenames_{self.config['experiment_name']}"
                 ".json"
             )
         )
@@ -500,35 +500,38 @@ class DataModule(pl.LightningDataModule):
         ):
             try:
                 image = Image.open(image_filename)
+                try:
+                    # Clean dataset
+                    if (image is not None) and (keypoints is not None):
+                        coco_image = {
+                            "width": int(image.size[0]),
+                            "height": int(image.size[1]),
+                            "image_filename": image_filename,
+                            "molfile_filename": molfile_filename,
+                            "smiles": smiles,
+                            "id": image_index,
+                            "license": 0,
+                            "date_captured": "2022-10-05",
+                        }
+                        coco_json["images"].append(coco_image)
+
+                        flat_keypoints = []
+                        for keypoint in keypoints:
+                            flat_keypoints.append(keypoint[0])
+                            flat_keypoints.append(keypoint[1])
+                            visibility = 2
+                            flat_keypoints.append(visibility)
+
+                        annotation = {
+                            "image_id": image_index,
+                            "keypoints": flat_keypoints,
+                            "iscrowd": 0,
+                        }
+                        coco_json["annotations"].append(annotation)
+                finally:
+                    image.close()
             except:
                 continue
-            # Clean dataset
-            if (image is not None) and (keypoints is not None):
-                coco_image = {
-                    "width": int(image.size[0]),
-                    "height": int(image.size[1]),
-                    "image_filename": image_filename,
-                    "molfile_filename": molfile_filename,
-                    "smiles": smiles,
-                    "id": image_index,
-                    "license": 0,
-                    "date_captured": "2022-10-05",
-                }
-                coco_json["images"].append(coco_image)
-
-                flat_keypoints = []
-                for keypoint in keypoints:
-                    flat_keypoints.append(keypoint[0])
-                    flat_keypoints.append(keypoint[1])
-                    visibility = 2
-                    flat_keypoints.append(visibility)
-
-                annotation = {
-                    "image_id": image_index,
-                    "keypoints": flat_keypoints,
-                    "iscrowd": 0,
-                }
-                coco_json["annotations"].append(annotation)
 
         with open(save_path, "w") as outfile:
             json.dump(coco_json, outfile)
@@ -1135,6 +1138,32 @@ class DataModule(pl.LightningDataModule):
         ]
         return transformed_keypoints
 
+    def teardown(self, stage=None):
+        """
+        Clean up resources when module is torn down.
+
+        This method is called by PyTorch Lightning when the DataModule
+        is being destroyed. It ensures proper cleanup of file handlers
+        and memory resources.
+
+        Args:
+            stage: The stage being torn down (fit, validate, test, predict)
+        """
+        # Close any open file handlers from caption remover
+        if hasattr(self, 'caption_remover'):
+            del self.caption_remover
+
+        # Clear dataset references to free memory and close file handlers
+        self.train_dataset = None
+        self.val_dataset = None
+        self.benchmarks_datasets = None
+
+        # Clear real datasets if they exist
+        if hasattr(self, 'train_dataset_real'):
+            self.train_dataset_real = None
+        if hasattr(self, 'val_dataset_real'):
+            self.val_dataset_real = None
+
     def train_dataloader(self):
         """
         Lightning convert this dataloader to a distributed dataloader.
@@ -1142,10 +1171,10 @@ class DataModule(pl.LightningDataModule):
         print("Setting up training dataloader")
         if self.mode == "fine-tuning":
             print(f"Real train set length: {len(self.train_dataset_real)}")
-            return self.get_dataloader(self.train_dataset_real)
+            return self.get_dataloader(self.train_dataset_real, is_training=True)
         else:
             print(f"Synthetic train set length: {len(self.train_dataset)}")
-            return self.get_dataloader(self.train_dataset)
+            return self.get_dataloader(self.train_dataset, is_training=True)
 
     def val_dataloader(self):
         """
@@ -1199,8 +1228,15 @@ class DataModule(pl.LightningDataModule):
         print(f"Number of predict sets: {len(dataloaders_list)}")
         return dataloaders_list
 
-    def get_dataloader(self, dataset):
-        if hasattr(dataset, "collate_fn") and (dataset.collate_fn != None):
+    def get_dataloader(self, dataset, is_training=False):
+        # Only use persistent workers for training to avoid file handler
+        # leaks
+        use_persistent_workers = (
+            is_training and self.config["nb_workers"] > 0
+        )
+
+        if (hasattr(dataset, "collate_fn") and
+                (dataset.collate_fn is not None)):
             return DataLoader(
                 dataset,
                 batch_size=self.config["batch_size"],
@@ -1208,7 +1244,7 @@ class DataModule(pl.LightningDataModule):
                 shuffle=False,
                 prefetch_factor=2,
                 pin_memory=True,
-                persistent_workers=True,
+                persistent_workers=use_persistent_workers,
                 drop_last=False,
                 collate_fn=dataset.collate_fn,
             )
@@ -1220,6 +1256,6 @@ class DataModule(pl.LightningDataModule):
                 shuffle=False,
                 prefetch_factor=2,
                 pin_memory=True,
-                persistent_workers=True,
+                persistent_workers=use_persistent_workers,
                 drop_last=False,
             )

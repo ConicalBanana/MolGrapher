@@ -28,18 +28,14 @@ class CustomWriter(BasePredictionWriter):
         # For that we will create a tmp folder that will be shared only across
         # the DDP processes that were created
         if trainer.is_global_zero:
-            output_dir = [
-                tempfile.mkdtemp(),
-            ]
+            output_dir = [tempfile.mkdtemp()]
             logger.info(
                 "Created temporary folder to store predictions: {}.".format(
                     output_dir[0]
                 )
             )
         else:
-            output_dir = [
-                None,
-            ]
+            output_dir = [None]
 
         torch.distributed.broadcast_object_list(output_dir)
 

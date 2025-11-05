@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 
 import math
-import multiprocessing
-import typing as t
-import os
+# import multiprocessing
+# import typing as t
+# import os
 
 # Images
 import cv2
@@ -56,13 +56,14 @@ class CaptionRemover:
 
     def _preprocess_images_process(
         self,
-        images_or_paths: t.Sequence[str | Image.ImageFile.ImageFile]
+        images_or_paths
     ):
         pil_images = []
         for image_or_path in tqdm(images_or_paths):
+            original_image = None
             if isinstance(image_or_path, str):
-                pil_image: Image.ImageFile.ImageFile \
-                    = Image.open(image_or_path)
+                original_image = Image.open(image_or_path)
+                pil_image: Image.ImageFile.ImageFile = original_image
             else:
                 pil_image: Image.ImageFile.ImageFile \
                     = image_or_path
@@ -88,6 +89,10 @@ class CaptionRemover:
                 border_size=self.border_size * 3,
             )
             pil_images.append(pil_image)
+
+            # Close original opened file to prevent file handle leaks
+            if original_image is not None:
+                original_image.close()
         return pil_images
 
     def preprocess_images(self, images_or_paths):

@@ -466,16 +466,23 @@ class MolgrapherModel:
                 graph.display_data_nodes_only(axis=axis[1])
 
                 if smiles != "C":
+                    with tempfile.NamedTemporaryFile(
+                        suffix=".png", delete=False
+                    ) as tmp_file:
+                        tmp_path = tmp_file.name
                     image = draw_molecule_rdkit(
                         smiles=smiles,
                         molecule=molecule,
                         augmentations=False,
-                        path=tempfile.NamedTemporaryFile(
-                            suffix=".png", delete=False
-                        ).name,
+                        path=tmp_path,
                     )
                     if image is not None:
                         axis[2].imshow(image.permute(1, 2, 0))
+                    # Clean up temporary file
+                    try:
+                        os.remove(tmp_path)
+                    except OSError:
+                        pass
                 fig_path = \
                     self.visualize_output_folder_path / \
                     image_filename.split('/')[-1]
